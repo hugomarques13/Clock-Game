@@ -5,6 +5,10 @@ using UnityEngine;
 /// A projectile placed by the player during their turn. It sits still until
 /// the clock runs out, then advances one cell at a time during resolution -
 /// up to its range, or until it hits a wall or an enemy.
+///
+/// Each projectile carries a small random visual offset so several sharing a
+/// cell don't stack into one blob. The offset is cosmetic only: Cell is still
+/// the exact grid position used for movement, walls and hit detection.
 /// </summary>
 public class Projectile : MonoBehaviour
 {
@@ -18,9 +22,19 @@ public class Projectile : MonoBehaviour
 
     public int damage = 1;
 
+    [Header("Visual scatter")]
+    [Tooltip("How far it can sit from the cell centre, as a fraction of the cell. 0 = dead centre.")]
+    [Range(0f, 1f)]
+    public float scatter = 0.45f;
+
+    [Tooltip("Random spots tried when placing. Higher = better spread, slightly more work.")]
+    public int scatterCandidates = 8;
+
     public Vector3Int Cell { get; private set; }
 
+    Vector3 visualOffset;
     int stepsTaken;
+    bool placed;
 
     /// <summary>True while at least one projectile still has travel left.</summary>
     public static bool AnyActive
@@ -55,8 +69,75 @@ public class Projectile : MonoBehaviour
 
     void Start()
     {
-        Cell = GridUtils.WorldToCell(transform.position);
-        transform.position = GridUtils.CellToWorld(Cell, transform.position.z);
+        // Safety net if something spawned this without calling PlaceAt.
+        if (!placed) PlaceAt(GridUtils.WorldToCell(transform.position));
+    }
+
+    /// <summary>
+    /// Drops the projectile onto a cell and picks its visual offset. Call this
+    /// after setting scatter, so the settings are actually applied.
+    /// </summary>
+    public void PlaceAt(Vector3Int cell)
+    {
+        Cell = cell;
+        placed = true;
+        visualOffset = PickOffset();
+        ApplyPosition();
+    }
+
+    /// <summary>
+    /// Samples a few random spots inside the cell and keeps whichever sits
+    /// furthest from the projectiles already there.
+    /// </summary>
+    Vector3 PickOffset()
+    {
+        if (scatter <= 0f) return Vector3.zero;
+
+        Vector2 cell = GridUtils.CellSize;
+        float rx = cell.x * scatter * 0.5f;
+        float ry = cell.y * scatter * 0.5f;
+
+        Vector3 best = Vector3.zero;
+        float bestClearance = -1f;
+        int tries = Mathf.Max(1, scatterCandidates);
+
+        for (int i = 0; i < tries; i++)
+        {
+            var candidate = new Vector3(Random.Range(-rx, rx), Random.Range(-ry, ry), 0f);
+            float clearance = NearestNeighbourDistance(candidate);
+
+            if (clearance > bestClearance)
+            {
+                bestClearance = clearance;
+                best = candidate;
+            }
+
+            // Nothing else in this cell, so any spot is as good as another.
+            if (bestClearance == float.MaxValue) break;
+        }
+
+        return best;
+    }
+
+    /// <summary>Distance from a candidate spot to the closest projectile sharing our cell.</summary>
+    float NearestNeighbourDistance(Vector3 candidate)
+    {
+        Vector3 world = GridUtils.CellToWorld(Cell) + candidate;
+        float nearest = float.MaxValue;
+
+        foreach (var p in All)
+        {
+            if (p == null || p == this || p.Cell != Cell) continue;
+            nearest = Mathf.Min(nearest, Vector2.Distance(world, p.transform.position));
+        }
+
+        return nearest;
+    }
+
+    void ApplyPosition()
+    {
+        Vector3 p = GridUtils.CellToWorld(Cell, transform.position.z) + visualOffset;
+        transform.position = p;
     }
 
     void Step()
@@ -74,7 +155,7 @@ public class Projectile : MonoBehaviour
 
         Cell = next;
         stepsTaken++;
-        transform.position = GridUtils.CellToWorld(Cell, transform.position.z);
+        ApplyPosition();   // keeps its offset, so it stays visually distinct in flight
 
         // Hit an enemy? Damage it and the projectile is spent.
         Enemy hit = Enemy.At(Cell);

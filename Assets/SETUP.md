@@ -173,7 +173,8 @@ Enemies need no collider — everything talks in grid cells, not physics.
 | | |
 |---|---|
 | **Your turn** | 10s counting down in real time. Move freely with WASD. |
-| **Z** | Places a projectile on your tile. Costs **2 seconds**. |
+| **Mouse** | Aims. The direction snaps to whichever of the 4 cardinals points closest to the cursor. A white square shows the tile you're aiming at. |
+| **Z** | Places a projectile on your tile, flying the way you're aiming. Costs **2 seconds**. |
 | **Clock hits 0** | You freeze. Projectiles fly first, then enemies attack. |
 | **Then** | Enemies roll a new direction, clock resets to 10s. |
 
@@ -194,9 +195,11 @@ On **Turn Manager**:
   resolution. Set to `0` for instant.
 
 On **Player Movement**:
-- `Projectile Direction` — currently `(1,0,0)` = right. Change to `(0,1,0)` for
-  up, `(-1,0,0)` for left.
 - `Projectile Range` — max tiles travelled (5)
+- `Projectile Scatter` — random spread inside the tile so stacked projectiles
+  don't overlap. `0` = dead centre
+- `Show Aim Preview` — the white square marking the tile you're aiming at
+- `Fallback Direction` — only used if there's no mouse/camera
 - `Projectile Prefab` — leave empty for a generated yellow square, or drop in
   your own sprite prefab later
 
